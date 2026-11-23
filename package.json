@@ -1,0 +1,147 @@
+{
+  "name": "ai-assist-codebase",
+  "displayName": "AI Assist Codebase",
+  "description": "Analyze your codebase, understand what it does, and get repo-specific guidance on how to implement changes without auto-suggesting or auto-editing code.",
+  "version": "0.0.1",
+  "publisher": "local-dev",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:aiAssistCodebase.findingsView",
+    "onCommand:aiAssistCodebase.analyzeWorkspace",
+    "onCommand:aiAssistCodebase.analyzeCurrentFile",
+    "onCommand:aiAssistCodebase.refreshAnalysis",
+    "onCommand:aiAssistCodebase.clearResults"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiAssistCodebase.analyzeWorkspace",
+        "title": "AI Assist: Analyze Workspace",
+        "icon": "$(search)"
+      },
+      {
+        "command": "aiAssistCodebase.analyzeCurrentFile",
+        "title": "AI Assist: Analyze Current File",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "aiAssistCodebase.refreshAnalysis",
+        "title": "AI Assist: Refresh Analysis",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "aiAssistCodebase.clearResults",
+        "title": "AI Assist: Clear Results",
+        "icon": "$(clear-all)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aiAssistCodebase",
+          "title": "AI Assist",
+          "icon": "$(hubot)"
+        }
+      ]
+    },
+    "views": {
+      "aiAssistCodebase": [
+        {
+          "id": "aiAssistCodebase.findingsView",
+          "name": "Assistant",
+          "type": "webview"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "aiAssistCodebase.analyzeWorkspace",
+          "when": "view == aiAssistCodebase.findingsView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "aiAssistCodebase.analyzeCurrentFile",
+          "when": "view == aiAssistCodebase.findingsView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "aiAssistCodebase.refreshAnalysis",
+          "when": "view == aiAssistCodebase.findingsView",
+          "group": "navigation@3"
+        },
+        {
+          "command": "aiAssistCodebase.clearResults",
+          "when": "view == aiAssistCodebase.findingsView",
+          "group": "navigation@4"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AI Assist Codebase",
+      "properties": {
+        "aiAssistCodebase.analysisTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "onSave"
+          ],
+          "default": "manual",
+          "description": "When to run analysis. Manual requires running a command; onSave analyzes the saved file."
+        },
+        "aiAssistCodebase.enableAgenticAnalysis": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use the VS Code Language Model API to synthesize static findings into prioritized actionable guidance. Falls back to static-only when unavailable."
+        },
+        "aiAssistCodebase.enableDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Publish findings to the VS Code Problems panel."
+        },
+        "aiAssistCodebase.maxFilesToScan": {
+          "type": "number",
+          "default": 200,
+          "minimum": 10,
+          "description": "Maximum number of files to include in a workspace scan."
+        },
+        "aiAssistCodebase.excludeGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/.git/**",
+            "**/out/**",
+            "**/coverage/**"
+          ],
+          "description": "Glob patterns excluded from workspace analysis."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext ts",
+    "test": "echo \"No tests yet\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.95.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}
