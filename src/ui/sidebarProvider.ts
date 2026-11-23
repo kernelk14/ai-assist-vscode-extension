@@ -12,6 +12,10 @@ export class FindingsSidebarProvider implements vscode.WebviewViewProvider {
   private asking = false;
   private lastQuestion = "";
   public onAsk?: (question: string) => Promise<void> | void;
+  public onAnalyzeWorkspace?: () => Promise<void> | void;
+  public onAnalyzeCurrentFile?: () => Promise<void> | void;
+  public onRefresh?: () => Promise<void> | void;
+  public onAskCurrentFile?: () => Promise<void> | void;
 
   constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -20,7 +24,7 @@ export class FindingsSidebarProvider implements vscode.WebviewViewProvider {
     webviewView.webview.options = { enableScripts: true };
     webviewView.webview.onDidReceiveMessage(async (message) => {
       if (message.type === "open" && typeof message.file === "string") {
-        await openFindingLocation(message.file, message.line);
+        await openFindingLocation(message.file, message.line, message.endLine);
       }
       if (message.type === "ask" && typeof message.question === "string") {
         const question = message.question.trim();
@@ -28,6 +32,13 @@ export class FindingsSidebarProvider implements vscode.WebviewViewProvider {
           this.lastQuestion = question;
           await this.onAsk(question);
         }
+      }
+      if (message.type === "analyzeWorkspace") await this.onAnalyzeWorkspace?.();
+      if (message.type === "analyzeCurrentFile") await this.onAnalyzeCurrentFile?.();
+      if (message.type === "refresh") await this.onRefresh?.();
+      if (message.type === "askCurrentFile") await this.onAskCurrentFile?.();
+      if (message.type === "draft" && typeof message.question === "string") {
+        this.lastQuestion = message.question;
       }
     });
     this.render();
@@ -61,6 +72,25 @@ export class FindingsSidebarProvider implements vscode.WebviewViewProvider {
 
   getCodebaseMap(): CodebaseMap | undefined {
     return this.report?.codebaseMap;
+  }
+
+  reveal(): void {
+    this.view?.show?.(true);
+  }
+
+  setDraftQuestion(question: string): void {
+    this.lastQuestion = question;
+    this.render();
+    this.reveal();
+  }
+
+  async askQuestion(question: string): Promise<void> {
+    this.lastQuestion = question;
+    this.render();
+    this.reveal();
+    if (this.onAsk) {
+      await this.onAsk(question.trim());
+    }
   }
 
   private render(): void {
@@ -108,6 +138,10 @@ export class FindingsSidebarProvider implements vscode.WebviewViewProvider {
     textarea { width: 100%; box-sizing: border-box; min-height: 64px; resize: vertical; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); border-radius: 4px; padding: 8px; font: inherit; }
     button { margin-top: 8px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 6px 10px; cursor: pointer; font: inherit; }
     button:hover { background: var(--vscode-button-hoverBackground); }
+    button.secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+    button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+    .actions button { margin-top: 0; }
     .chip { display: inline-block; margin: 4px 6px 0 0; padding: 4px 8px; border-radius: 12px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); cursor: pointer; font-size: 11px; line-height: 1.4; }
     .chip:hover { background: var(--vscode-button-secondaryHoverBackground); }
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -119,6 +153,13 @@ export class FindingsSidebarProvider implements vscode.WebviewViewProvider {
   </style>
 </head>
 <body>
+  <div class="actions">
+    <button class="secondary" id="analyzeWorkspaceBtn">Analyze Workspace</button>
+    <button class="secondary" id="analyzeFileBtn">Analyze File</button>
+    <button class="secondary" id="askFileBtn">Ask About File</button>
+    <button class="secondary" id="refreshBtn">Refresh</button>
+  </div>
+  <div class="meta">Codebase-aware teaching assistant — grounded in your workspace, no auto-edits.</div>
   <h2>Ask About This Codebase</h2>
   <div class="card">
     <textarea id="question" placeholder="e.g. How do I add a new API endpoint? Teach me how this codebase handles X.">${escapeHtml(this.lastQuestion)}</textarea>
@@ -147,6 +188,10 @@ export class FindingsSidebarProvider implements vscode.WebviewViewProvider {
       const q = questionEl.value;
       if (q && q.trim()) vscode.postMessage({ type: 'ask', question: q });
     });
+    document.getElementById('analyzeWorkspaceBtn').addEventListener('click', () => vscode.postMessage({ type: 'analyzeWorkspace' }));
+    document.getElementById('analyzeFileBtn').addEventListener('click', () => vscode.postMessage({ type: 'analyzeCurrentFile' }));
+    document.getElementById('askFileBtn').addEventListener('click', () => vscode.postMessage({ type: 'askCurrentFile' }));
+    document.getElementById('refreshBtn').addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
     questionEl.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         const q = e.target.value;
@@ -155,7 +200,7 @@ export class FindingsSidebarProvider implements vscode.WebviewViewProvider {
     });
     document.querySelectorAll('[data-file]').forEach(el => {
       el.addEventListener('click', () => {
-        vscode.postMessage({ type: 'open', file: el.dataset.file, line: Number(el.dataset.line || 1) });
+        vscode.postMessage({ type: 'open', file: el.dataset.file, line: Number(el.dataset.line || 1), endLine: Number(el.dataset.endLine || el.dataset.line || 1) });
       });
     });
     document.querySelectorAll('[data-ask]').forEach(el => {
@@ -255,9 +300,10 @@ function renderReport(report: AnalysisReport | undefined): string {
 
 function renderFinding(finding: Finding): string {
   const location = finding.file
-    ? `<div class="loc" data-file="${escapeAttr(finding.file)}" data-line="${finding.line ?? 1}">${escapeHtml(finding.file)}${finding.line ? `:${finding.line}` : ""}</div>`
+    ? `<div class="loc" data-file="${escapeAttr(finding.file)}" data-line="${finding.line ?? 1}" data-end-line="${finding.endLine ?? finding.line ?? 1}">${escapeHtml(finding.file)}${finding.line ? `:${finding.line}` : ""}</div>`
     : "";
   const evidence = finding.evidence ? `<div class="evidence">${escapeHtml(finding.evidence)}</div>` : "";
+  const askQuestion = `Teach me why this is an issue and how to fix it in this codebase: ${finding.title}${finding.file ? ` at ${finding.file}${finding.line ? `:${finding.line}` : ""}` : ""}. Recommendation: ${finding.recommendation}`;
   return `
     <div class="finding ${escapeAttr(finding.severity)}">
       <div class="title">${escapeHtml(finding.title)}</div>
@@ -269,11 +315,12 @@ function renderFinding(finding: Finding): string {
       ${location}
       <div class="rec">${escapeHtml(finding.recommendation)}</div>
       ${evidence}
+      <div class="meta"><span class="chip" data-ask="${escapeAttr(askQuestion)}">Teach me how to fix this</span></div>
     </div>
   `;
 }
 
-async function openFindingLocation(file: string, line: number | undefined): Promise<void> {
+async function openFindingLocation(file: string, line: number | undefined, endLine?: number): Promise<void> {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri;
   const uri = /^[a-zA-Z]:[\\/]/.test(file) || file.startsWith("/")
     ? vscode.Uri.file(file)
@@ -281,10 +328,14 @@ async function openFindingLocation(file: string, line: number | undefined): Prom
       ? vscode.Uri.joinPath(root, file)
       : vscode.Uri.file(file);
   const doc = await vscode.workspace.openTextDocument(uri);
-  const editor = await vscode.window.showTextDocument(doc, { preview: true });
-  const pos = new vscode.Position(Math.max(0, (line ?? 1) - 1), 0);
-  editor.selection = new vscode.Selection(pos, pos);
-  editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+  const editor = await vscode.window.showTextDocument(doc, { preview: false });
+  const start = Math.max(0, (line ?? 1) - 1);
+  const end = Math.max(start, (endLine ?? line ?? 1) - 1);
+  const startPos = new vscode.Position(start, 0);
+  const endPos = new vscode.Position(end, doc.lineAt(Math.min(end, doc.lineCount - 1)).text.length);
+  const range = new vscode.Range(startPos, endPos);
+  editor.selection = new vscode.Selection(startPos, endPos);
+  editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }
 
 function escapeHtml(value: string): string {

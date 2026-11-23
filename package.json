@@ -16,7 +16,9 @@
     "onCommand:aiAssistCodebase.analyzeWorkspace",
     "onCommand:aiAssistCodebase.analyzeCurrentFile",
     "onCommand:aiAssistCodebase.refreshAnalysis",
-    "onCommand:aiAssistCodebase.clearResults"
+    "onCommand:aiAssistCodebase.clearResults",
+    "onCommand:aiAssistCodebase.askAboutSelection",
+    "onCommand:aiAssistCodebase.askAboutCurrentFile"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -40,6 +42,14 @@
         "command": "aiAssistCodebase.clearResults",
         "title": "AI Assist: Clear Results",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "aiAssistCodebase.askAboutSelection",
+        "title": "AI Assist: Ask About Selection"
+      },
+      {
+        "command": "aiAssistCodebase.askAboutCurrentFile",
+        "title": "AI Assist: Ask About Current File"
       }
     ],
     "viewsContainers": {
@@ -61,6 +71,23 @@
       ]
     },
     "menus": {
+      "editor/context": [
+        {
+          "command": "aiAssistCodebase.askAboutSelection",
+          "when": "editorHasSelection",
+          "group": "aiassist@1"
+        },
+        {
+          "command": "aiAssistCodebase.askAboutCurrentFile",
+          "when": "editorTextFocus",
+          "group": "aiassist@2"
+        },
+        {
+          "command": "aiAssistCodebase.analyzeCurrentFile",
+          "when": "editorTextFocus",
+          "group": "aiassist@3"
+        }
+      ],
       "view/title": [
         {
           "command": "aiAssistCodebase.analyzeWorkspace",
